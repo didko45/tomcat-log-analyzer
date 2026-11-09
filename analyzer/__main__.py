@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 from typing import List, Optional
 
+from .masking import Masker, mask_entry
 from .parser import LogEntry, group_entries, parse_lines
 
 
@@ -15,6 +16,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument("logs", nargs="+", type=Path, help="catalina.out or other JULI log files")
     parser.add_argument("--min-level", default="WARNING", choices=["SEVERE", "WARNING", "INFO"])
+    parser.add_argument(
+        "--show-masked", type=int, default=0, metavar="N",
+        help="print the masked example of the top N groups (what would be sent for analysis)",
+    )
     args = parser.parse_args(argv)
 
     entries: List[LogEntry] = []
@@ -31,6 +36,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             f"{group.first_seen:%Y-%m-%d %H:%M:%S}  {group.last_seen:%Y-%m-%d %H:%M:%S}  "
             f"{group.signature}"
         )
+
+    if args.show_masked:
+        masker = Masker()
+        for group in groups[: args.show_masked]:
+            print(f"\n--- {group.signature} (x{group.count}) ---")
+            print(mask_entry(group.example, masker))
     return 0
 
 
