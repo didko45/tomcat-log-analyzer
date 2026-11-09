@@ -12,13 +12,17 @@ from .parser import LogEntry, group_entries, parse_lines
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="tomcat-log-analyzer",
-        description="Group Tomcat log errors by root cause.",
+        description="Group Tomcat log errors by root cause and optionally ask Claude for a diagnosis.",
     )
     parser.add_argument("logs", nargs="+", type=Path, help="catalina.out or other JULI log files")
     parser.add_argument("--min-level", default="WARNING", choices=["SEVERE", "WARNING", "INFO"])
     parser.add_argument(
         "--show-masked", type=int, default=0, metavar="N",
         help="print the masked example of the top N groups (what would be sent for analysis)",
+    )
+    parser.add_argument(
+        "--analyze", type=int, default=0, metavar="N",
+        help="send the top N groups (masked) to Claude for root-cause analysis; needs ANTHROPIC_API_KEY",
     )
     args = parser.parse_args(argv)
 
@@ -42,6 +46,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         for group in groups[: args.show_masked]:
             print(f"\n--- {group.signature} (x{group.count}) ---")
             print(mask_entry(group.example, masker))
+
+    if args.analyze and groups:
+        from .ai import DEFAULT_MODEL, analyze
+
+        findings, summary = analyze(groups[: args.analyze])
+        print(f"\n=== Analysis by {DEFAULT_MODEL} ===")
+        for index, finding in enumerate(findings, start=1):
+            group = finding.group
+            print(f"\n[{index}] {group.signature}")
+            print(f"    {group.level}, x{group.count}, confidence: {finding.confidence}")
+            print(f"    Likely cause: {finding.likely_cause}")
+            if finding.first_checks:
+                print("    Check first:")
+                for check in finding.first_checks:
+                    print(f"      - {check}")
+            if finding.related_to:
+                print(f"    Related to groups: {', '.join(str(n) for n in finding.related_to)}")
+        if summary:
+            print(f"\nSummary: {summary}")
     return 0
 
 
