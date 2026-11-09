@@ -24,6 +24,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--analyze", type=int, default=0, metavar="N",
         help="send the top N groups (masked) to Claude for root-cause analysis; needs ANTHROPIC_API_KEY",
     )
+    parser.add_argument("--report", type=Path, metavar="PATH", help="write a masked Markdown report")
     args = parser.parse_args(argv)
 
     entries: List[LogEntry] = []
@@ -47,11 +48,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"\n--- {group.signature} (x{group.count}) ---")
             print(mask_entry(group.example, masker))
 
+    findings, summary, model = None, "", None
     if args.analyze and groups:
         from .ai import DEFAULT_MODEL, analyze
 
+        model = DEFAULT_MODEL
         findings, summary = analyze(groups[: args.analyze])
-        print(f"\n=== Analysis by {DEFAULT_MODEL} ===")
+        print(f"\n=== Analysis by {model} ===")
         for index, finding in enumerate(findings, start=1):
             group = finding.group
             print(f"\n[{index}] {group.signature}")
@@ -65,6 +68,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print(f"    Related to groups: {', '.join(str(n) for n in finding.related_to)}")
         if summary:
             print(f"\nSummary: {summary}")
+
+    if args.report:
+        from .report import render_markdown
+
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(
+            render_markdown(groups, [p.name for p in args.logs], findings, summary, model),
+            encoding="utf-8",
+        )
+        print(f"\nReport written to {args.report}")
     return 0
 
 

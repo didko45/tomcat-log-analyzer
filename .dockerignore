@@ -1,0 +1,7 @@
+.git
+.github
+tests
+samples
+reports
+**/__pycache__
+.pytest_cache
